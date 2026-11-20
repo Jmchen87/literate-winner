@@ -1,33 +1,20 @@
-import {
-  verifyCloudProof,
-  IVerifyResponse,
-  ISuccessResult,
-} from "@worldcoin/minikit-js";
+import { verifyCloudProof, ISuccessResult } from "@worldcoin/minikit-js";
 import { RequestHandler } from "express";
-
-interface IRequestPayload {
-  payload: ISuccessResult;
-  action: string;
-  signal: string | undefined;
-}
-
 export const verifyHandler: RequestHandler = async (req, res) => {
-  const { payload, action, signal } = req.body as IRequestPayload;
-  const app_id = process.env.APP_ID as `app_${string}`;
-  const verifyRes = (await verifyCloudProof(
-    payload,
-    app_id,
-    action,
-    signal
-  )) as IVerifyResponse;
-
-  console.log(verifyRes);
-
-  if (verifyRes.success) {
-    res.status(200).json({ verifyRes });
-    return;
-  } else {
-    res.status(400).json({ verifyRes });
-    return;
+  const appId = process.env.APP_ID;
+  const action = process.env.WORLD_ID_ACTION;
+  if (!appId || !appId.startsWith("app_") || !action) {
+    res.status(503).json({ success: false, message: "Verification not configured" }); return;
+  }
+  const p = req.body?.payload;
+  if (!p || p.status !== "success" || p.verification_level !== "orb" ||
+      !["proof", "merkle_root", "nullifier_hash"].every(k => typeof p[k] === "string" && p[k].length > 0 && p[k].length <= 16000)) {
+    res.status(400).json({ success: false, message: "Invalid proof" }); return;
+  }
+  try {
+    const result = await verifyCloudProof(p as ISuccessResult, appId as `app_${string}`, action, "");
+    res.status(result.success ? 200 : 400).json({ success: result.success === true });
+  } catch {
+    res.status(502).json({ success: false, message: "Verification unavailable" });
   }
 };
