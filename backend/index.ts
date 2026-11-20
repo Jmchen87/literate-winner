@@ -1,37 +1,24 @@
 import express from "express";
-
 import { verifyHandler } from "./src/verify";
-import { initiatePaymentHandler } from "./src/initiate-payment";
-import { confirmPaymentHandler } from "./src/confirm-payment";
-import cors from "cors";
-
 const app = express();
-
-// trust the proxy to allow HTTPS protocol to be detected
-// https://expressjs.com/en/guide/behind-proxies.html
-app.set("trust proxy", true);
-// allow cors
-app.use(cors());
-// json middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// request logger middleware
-app.use((req, _res, next) => {
-  console.log(`logger: ${req.method} ${req.url}`);
+app.disable("x-powered-by");
+app.use(express.json({ limit: "32kb" }));
+app.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
   next();
 });
-
-app.get("/ping", (_, res) => {
-  res.send("minikit-example pong v1");
+app.get("/ping", (_, res) => { res.send("minikit-example pong v1"); });
+let windowStart = Date.now();
+let requests = 0;
+app.post("/verify", (req, res, next) => {
+  if (Date.now() - windowStart >= 60000) { windowStart = Date.now(); requests = 0; }
+  if (++requests > 60) { res.status(429).json({ success: false }); return; }
+  if (!req.is("application/json")) { res.status(415).json({ success: false }); return; }
+  next();
+}, verifyHandler);
+// Payment routes deliberately disabled pending a separate security review.
+app.post(["/initiate-payment", "/confirm-payment"], (_, res) => {
+  res.status(503).json({ success: false, message: "Payments disabled" });
 });
-
-// protected routes
-app.post("/verify", verifyHandler);
-app.post("/initiate-payment", initiatePaymentHandler);
-app.post("/confirm-payment", confirmPaymentHandler);
-
-const port = 3000; // use env var
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
+app.listen(Number(process.env.PORT || 3000), () => console.log("API listening"));
