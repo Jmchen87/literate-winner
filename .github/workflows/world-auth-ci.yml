@@ -9,8 +9,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - run: corepack enable && corepack prepare pnpm@9 --activate
@@ -29,6 +29,6 @@ jobs:
           pid=$!
           trap 'kill "$pid" || true' EXIT
           curl --retry 10 --retry-connrefused --retry-delay 1 -fsS http://localhost:3000/ping
-          for route in verify initiate-payment confirm-payment; do
+          for route in verify initiate-payment confirm-payment auth/nonce auth/wallet auth/logout; do
             test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' http://localhost:3000/$route)" = 503
           done
