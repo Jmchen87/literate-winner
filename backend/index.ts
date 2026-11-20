@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyHandler } from "./src/verify";
+import { auth } from "./src/auth";
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "32kb" }));
@@ -8,6 +9,7 @@ app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   next();
 });
+app.use("/auth", auth);
 app.get("/ping", (_, res) => { res.send("minikit-example pong v1"); });
 let windowStart = Date.now();
 let requests = 0;
