@@ -1,81 +1,24 @@
-import {
-  MiniKit,
-  VerificationLevel,
-  ISuccessResult,
-  MiniAppVerifyActionErrorPayload,
-  IVerifyResponse,
-} from "@worldcoin/minikit-js";
-import { useCallback, useState } from "react";
-
-export type VerifyCommandInput = {
-  action: string;
-  signal?: string;
-  verification_level?: VerificationLevel; // Default: Orb
-};
-
-const verifyPayload: VerifyCommandInput = {
-  action: "test-action", // This is your action ID from the Developer Portal
-  signal: "",
-  verification_level: VerificationLevel.Orb, // Orb | Device
-};
-
+import { MiniKit, VerificationLevel } from "@worldcoin/minikit-js";
+import { useRef, useState } from "react";
+const api = import.meta.env.VITE_API_BASE_URL || "/api";
+const action = import.meta.env.VITE_WORLD_ID_ACTION;
 export const VerifyBlock = () => {
-  const [handleVerifyResponse, setHandleVerifyResponse] = useState<
-    MiniAppVerifyActionErrorPayload | IVerifyResponse | null
-  >(null);
-
-  const handleVerify = useCallback(async () => {
-    if (!MiniKit.isInstalled()) {
-      console.warn("Tried to invoke 'verify', but MiniKit is not installed.");
-      return null;
-    }
-
-    const { finalPayload } = await MiniKit.commandsAsync.verify(verifyPayload);
-
-    // no need to verify if command errored
-    if (finalPayload.status === "error") {
-      console.log("Command error");
-      console.log(finalPayload);
-
-      setHandleVerifyResponse(finalPayload);
-      return finalPayload;
-    }
-
-    // Verify the proof in the backend
-    const verifyResponse = await fetch(
-      `${process.env.NEXTAUTH_URL}/api/verify`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          payload: finalPayload as ISuccessResult, // Parses only the fields we need to verify
-          action: verifyPayload.action,
-          signal: verifyPayload.signal, // Optional
-        }),
-      }
-    );
-
-    // TODO: Handle Success!
-    const verifyResponseJson = await verifyResponse.json();
-
-    if (verifyResponseJson.status === 200) {
-      console.log("Verification success!");
-      console.log(finalPayload);
-    }
-
-    setHandleVerifyResponse(verifyResponseJson);
-    return verifyResponseJson;
-  }, []);
-
-  return (
-    <div>
-      <h1>Verify Block</h1>
-      <button className="bg-green-500 p-4" onClick={handleVerify}>
-        Test Verify
-      </button>
-      <span>{JSON.stringify(handleVerifyResponse, null, 2)}</span>
-    </div>
-  );
+  const busy = useRef(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const handleVerify = async () => {
+    if (busy.current) return;
+    if (!action || !MiniKit.isInstalled()) { setMessage("Verification unavailable. Open in World App and check configuration."); return; }
+    busy.current = true; setLoading(true); setMessage("");
+    try {
+      const { finalPayload } = await MiniKit.commandsAsync.verify({ action, signal: "", verification_level: VerificationLevel.Orb });
+      if (finalPayload.status === "error") throw new Error("Verification cancelled");
+      const response = await fetch(api + "/verify", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: finalPayload }) });
+      const result = await response.json();
+      if (!response.ok || result.success !== true) throw new Error("Verification failed");
+      setMessage("Proof verified. This does not create a login session.");
+    } catch { setMessage("Verification unsuccessful. Please try again."); }
+    finally { busy.current = false; setLoading(false); }
+  };
+  return <div><h1>World ID Verification</h1><button className="bg-yellow-500 p-4" disabled={loading} onClick={handleVerify}>{loading ? "Verifying..." : "Verify identity"}</button><p role="status">{message}</p></div>;
 };
